@@ -1,7 +1,5 @@
 # Windows Support Script
 
-![Versão]('https://img.shields.io/badge/Version-4.2-blue.svg') ![Licença]('https://img.shields.io/badge/License-MIT-green.svg') ![Plataforma]('https://img.shields.io/badge/Platform-Windows-lightgrey.svg')
-
 Este repositório contém um script Batch (`.bat`) completo para realizar tarefas de suporte técnico, manutenção e otimização em sistemas operativos Windows. O projeto, criado por **Jhon Parowski**, foi desenvolvido para ser uma ferramenta "tudo-em-um" para administradores de sistemas e utilizadores que procuram resolver problemas comuns de forma eficiente.
 
 ## Funcionalidades
