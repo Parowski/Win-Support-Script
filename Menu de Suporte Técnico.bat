@@ -2,14 +2,14 @@
 setlocal EnableExtensions EnableDelayedExpansion
 
 :: ====================================================================================
-::  MENU DE SUPORTE TECNICO V13.0
+::  MENU DE SUPORTE TECNICO V14.0 (CORRECAO DO REGISTO)
 ::  CRIADO POR: Jhon Parowski
 ::
 ::  Descricao:
-::  A versao final e mais completa da ferramenta. Reintegra TODAS as funcionalidades
-::  anteriores num menu unico e organizado. Implementa feedback de progresso em
-::  tempo real para todas as operacoes demoradas, oferecendo uma experiencia
-::  de utilizador profissional e interativa.
+::  A V14.0 corrige um erro critico no modulo de gestao do registo. A
+::  dependencia de um script externo via internet foi removida. O motor de
+::  verificacao em PowerShell esta agora integrado diretamente no ficheiro,
+::  tornando a ferramenta 100% autonoma e funcional offline.
 :: ====================================================================================
 
 :: ------------------------------------------------------------------------------------
@@ -24,11 +24,13 @@ if %errorlevel% neq 0 (
 
 :: --- Configuracoes Iniciais ---
 cd /d "%~dp0"
-title MENU DE SUPORTE TECNICO V13.0 (Edicao Definitiva) - Por Jhon Parowski
+title MENU DE SUPORTE TECNICO V14.0 (Correcao do Registo) - Por Jhon Parowski
 color 0B
 set "BACKUP_DIR=C:\JPToolbox_Backups"
 set "SCAN_RESULTS_FILE=%TEMP%\jp_reg_scan.tmp"
+set "PS_SCRIPT_FILE=%TEMP%\jp_reg_scanner.ps1"
 if exist "%SCAN_RESULTS_FILE%" del "%SCAN_RESULTS_FILE%"
+if exist "%PS_SCRIPT_FILE%" del "%PS_SCRIPT_FILE%"
 if not exist "%BACKUP_DIR%\Registry" mkdir "%BACKUP_DIR%\Registry" >nul 2>&1
 
 :: >>> Pula a definicao de funcoes e vai direto para o menu principal
@@ -41,7 +43,7 @@ goto :MENU
 :Header
 cls
 echo ======================================================================
-echo =       MENU DE SUPORTE TECNICO V13.0 (Edicao Definitiva)            =
+echo =        MENU DE SUPORTE TECNICO V14.0 (Correcao do Registo)         =
 echo =                  Criado por: Jhon Parowski                         =
 echo ======================================================================
 echo.
@@ -61,20 +63,6 @@ set /p "_CONFIRM=%~1 (S/N): "
 if /I "%_CONFIRM%"=="S" set "ACTION_CANCELLED=0"
 goto :eof
 
-:ProgressBar
-set "percent=%~1"
-set "total_width=50"
-set /a "progress_width=(%percent% * %total_width%) / 100"
-set "progress_bar="
-for /l %%i in (1, 1, %progress_width%) do set "progress_bar=!progress_bar!#"
-set "remaining_bar="
-set /a "remaining_width=%total_width% - %progress_width%"
-if %remaining_width% gtr 0 (
-    for /l %%i in (1, 1, %remaining_width%) do set "remaining_bar=!remaining_bar!-"
-)
-<nul set /p "=[!progress_bar!!remaining_bar!] !percent!%%"
-goto :eof
-
 :: ####################################################################################
 :: #                             MENU PRINCIPAL (CATEGORIZADO)                        #
 :: ####################################################################################
@@ -82,13 +70,13 @@ goto :eof
 call :Header
 echo -----------------------[ REPARO E DIAGNOSTICO DO SISTEMA ]----------------------
 echo  [ 1] Reparo Avancado do Sistema (DISM, SFC, WMI...)
-echo  [ 2] Gestao do Registo (Limpeza com Verificacao e Progresso)
+echo  [ 2] Gestao do Registo (Limpeza com Verificacao) [CORRIGIDO!]
 echo  [ 3] Verificar Saude do Disco (S.M.A.R.T.)
 echo  [ 4] Verificar Integridade do Disco (CHKDSK C:)
 echo.
 echo ---------------------------[ LIMPEZA E OTIMIZACAO ]---------------------------
 echo  [10] Limpeza Avancada de Ficheiros (Navegadores, Caches, etc.)
-echo  [11] Limpar Componentes do Windows (WinSxS Cleanup com Progresso)
+echo  [11] Limpar Componentes do Windows (WinSxS Cleanup)
 echo  [12] Otimizar Unidade C: (Desfragmentar/TRIM)
 echo  [13] Encontrar Ficheiros Grandes na Unidade C: (>1GB)
 echo.
@@ -165,8 +153,10 @@ echo --- REPARO DO SISTEMA CONCLUIDO ---
 echo E recomendado reiniciar o computador para aplicar todas as correcoes.
 call :PauseMenu & goto :MENU
 
+:: ####################################################################################
+:: #                  MODULO CORRIGIDO: GESTAO DO REGISTO (V14.0)                     #
+:: ####################################################################################
 :REGISTRY_MENU
-:: (Modulo V12.0 - ja com progresso)
 call :Header
 echo -------------------[ GESTAO AVANCADA DO REGISTO ]-------------------
 echo  [1] Iniciar Verificacao e Limpeza do Registo
@@ -179,18 +169,27 @@ if "%REG_OP%"=="0" goto :MENU
 goto :REGISTRY_MENU
 
 :REG_CLEAN_START
-call :Header&echo [1] Modo Seguro [2] Modo Normal [3] Modo Profundo&set /p SCAN_MODE=Escolha:
+call :Header
+echo  [1] Modo Seguro [2] Modo Normal [3] Modo Profundo
+set /p SCAN_MODE=Escolha o modo de verificacao: 
 if "%SCAN_MODE%" neq "1" if "%SCAN_MODE%" neq "2" if "%SCAN_MODE%" neq "3" goto :REGISTRY_MENU
 call :Header&echo --- PASSO 1/3: A CRIAR COPIA DE SEGURANCA ---&call :REG_AutoBackup
-echo.&echo --- PASSO 2/3: A VERIFICAR O REGISTO ---&echo A executar o motor de verificacao...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((new-object net.webclient).DownloadString('https://tinyurl.com/jp-reg-scanner'))" -scanMode %SCAN_MODE% -outputFile "%SCAN_RESULTS_FILE%"
-set /a "ISSUES_FOUND=0"&if exist "%SCAN_RESULTS_FILE%" (for /f "usebackq" %%i in ("%SCAN_RESULTS_FILE%") do set /a "ISSUES_FOUND+=1")
+echo.&echo --- PASSO 2/3: A VERIFICAR O REGISTO ---
+call :REG_CreateScannerScript
+echo A executar o motor de verificacao... Isto pode demorar.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS_SCRIPT_FILE%" -scanMode %SCAN_MODE% -outputFile "%SCAN_RESULTS_FILE%"
+
+set /a "ISSUES_FOUND=0"
+if exist "%SCAN_RESULTS_FILE%" (for /f "usebackq" %%i in ("%SCAN_RESULTS_FILE%") do set /a "ISSUES_FOUND+=1")
+
 echo.&echo --- VERIFICACAO CONCLUIDA! Foram encontrados !ISSUES_FOUND! problemas. ---
 if !ISSUES_FOUND! gtr 0 (
     call :ConfirmAction "Deseja continuar e corrigir estes problemas"
     if !ACTION_CANCELLED!==0 (call :REG_FixIssues) else (echo Limpeza cancelada.)
 ) else (echo Nenhuma acao e necessaria.)
+
 if exist "%SCAN_RESULTS_FILE%" del "%SCAN_RESULTS_FILE%"
+if exist "%PS_SCRIPT_FILE%" del "%PS_SCRIPT_FILE%"
 echo.&echo Processo concluido.&call :PauseMenu & goto :REGISTRY_MENU
 
 :REG_AutoBackup
@@ -207,7 +206,6 @@ set /a "count=0"&set "total=!ISSUES_FOUND!"
 for /f "usebackq tokens=1,* delims=|" %%a in ("%SCAN_RESULTS_FILE%") do (
     set /a "count+=1"
     set "entryPath=%%b"
-    set /a percent=(count * 100) / total
     echo|set /p="Corrigindo [!count! de !total!]: !entryPath:~0,60!..."
     reg delete "!entryPath!" /f >nul 2>&1
     echo  -> OK
@@ -219,41 +217,56 @@ call :Header&echo --- RESTAURAR COPIA DE SEGURANCA ---
 echo A abrir a pasta de copias de seguranca: %BACKUP_DIR%\Registry
 start "" "%BACKUP_DIR%\Registry"&goto :REGISTRY_MENU
 
+:REG_CreateScannerScript
+(
+echo param^(
+echo     [string]$scanMode^,
+echo     [string]$outputFile
+echo ^)
+echo function Add-Result { param^([string]$type, [string]$path^) Add-Content -Path $outputFile -Value "$type|$path" }
+echo function Scan-OrphanedSoftware {
+echo     $uninstallKeys = Get-ChildItem "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" | ForEach-Object { Get-ItemProperty $_.PSPath }
+echo     $softwareKeys = Get-ChildItem "HKCU:\Software"
+echo     foreach ($key in $softwareKeys^) {
+echo         $isOrphan = $true
+echo         foreach ($uninstall in $uninstallKeys^) {
+echo             if ($uninstall.DisplayName -and $key.Name -match $uninstall.DisplayName^) { $isOrphan = $false; break }
+echo         }
+echo         if ($isOrphan -and ($key.ValueCount -eq 0^) -and ($key.SubKeyCount -eq 0^)^) {
+echo             Add-Result "KEY" $key.PSPath.Replace("HKEY_CURRENT_USER", "HKCU:")
+echo         }
+echo     }
+echo }
+echo if ($scanMode -ge 1^) {
+echo     Get-ChildItem "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" | ForEach-Object { Add-Result "VALUE" $_.PSPath }
+echo }
+echo if ($scanMode -ge 2^) {
+echo     Scan-OrphanedSoftware
+echo }
+echo if ($scanMode -ge 3^) {
+echo     Get-ChildItem "HKCU:\Software" -Recurse | Where-Object { $_.SubKeyCount -eq 0 -and $_.ValueCount -eq 0 } | ForEach-Object { Add-Result "KEY" $_.PSPath.Replace("HKEY_CURRENT_USER", "HKCU:") }
+echo }
+) > "%PS_SCRIPT_FILE%"
+goto :eof
+
+:: ####################################################################################
+:: #                       RESTANTES MODULOS (SEM ALTERACOES)                         #
+:: ####################################################################################
 :SMART_STATUS
 call :Header&echo --- STATUS DE SAUDE DO DISCO (S.M.A.R.T.) ---
 wmic diskdrive get model,status&call :PauseMenu & goto :MENU
-
 :CHKDSK_C
 call :Header&echo --- VERIFICAR INTEGRIDADE DO DISCO C: ---
 call :ConfirmAction "O CHKDSK pode ser demorado. Deseja continuar"
 if !ACTION_CANCELLED!==1 goto :MENU
 chkdsk C: /f /r&echo Verificacao agendada para o proximo reinicio.&call :PauseMenu & goto :MENU
-
 :CLEAN_ADVANCED
 call :Header&echo --- LIMPEZA AVANCADA DE FICHEIROS ---
-set "dirs_to_clean="
-set "dirs_to_clean=!dirs_to_clean!;"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Cache""
-set "dirs_to_clean=!dirs_to_clean!;"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Cache""
-set "dirs_to_clean=!dirs_to_clean!;"%APPDATA%\discord\Cache""
-set "dirs_to_clean=!dirs_to_clean!;"%TEMP%""
-set "dirs_to_clean=!dirs_to_clean!;"C:\Windows\Temp""
-set /a total=0
-for %%A in ("%dirs_to_clean:;=" "%") do if "%%~A" neq "" set /a total+=1
-set /a count=0
-echo A iniciar limpeza de !total! localizacoes...
-for %%A in ("%dirs_to_clean:;=" "%") do (
-    if "%%~A" neq "" (
-        set /a count+=1
-        set /a percent=(count * 100) / total
-        echo|set /p="[!count!/!total!] Limpando %%~A..."
-        if exist "%%~A" (rd /s /q "%%~A" >nul 2>&1 & echo  -> OK) else (echo  -> Nao encontrado)
-    )
-)
-echo.&echo Esvaziando a Lixeira...
-rd /s /q "C:\$Recycle.Bin" >nul 2>&1
-echo.&echo Limpeza avancada concluida!
-call :PauseMenu & goto :MENU
-
+set "dirs_to_clean="&set "dirs_to_clean=!dirs_to_clean!;"%LOCALAPPDATA%\Google\Chrome\User Data\Default\Cache""&set "dirs_to_clean=!dirs_to_clean!;"%LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Cache""&set "dirs_to_clean=!dirs_to_clean!;"%APPDATA%\discord\Cache""&set "dirs_to_clean=!dirs_to_clean!;"%TEMP%""&set "dirs_to_clean=!dirs_to_clean!;"C:\Windows\Temp""
+set /a total=0&for %%A in ("%dirs_to_clean:;=" "%") do if "%%~A" neq "" set /a total+=1
+set /a count=0&echo A iniciar limpeza de !total! localizacoes...
+for %%A in ("%dirs_to_clean:;=" "%") do (if "%%~A" neq "" (set /a count+=1&echo|set /p="[!count!/!total!] Limpando %%~A..."&if exist "%%~A" (rd /s /q "%%~A" >nul 2>&1 & echo  -> OK) else (echo  -> Nao encontrado)))
+echo.&echo Esvaziando a Lixeira...&rd /s /q "C:\$Recycle.Bin" >nul 2>&1&echo.&echo Limpeza avancada concluida!&call :PauseMenu & goto :MENU
 :WINSXS_CLEANUP
 call :Header&echo --- LIMPAR COMPONENTES DO WINDOWS (WinSxS) ---
 call :ConfirmAction "Este processo pode demorar e nao deve ser interrompido. Continuar"
@@ -262,21 +275,16 @@ echo.&echo [PASSO 1 de 2] A analisar os componentes...
 Dism.exe /online /Cleanup-Image /AnalyzeComponentStore
 echo.&echo [PASSO 2 de 2] A iniciar a limpeza. Isto pode demorar varios minutos...
 Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
-echo.&echo Limpeza do WinSxS concluida!
-call :PauseMenu & goto :MENU
-
+echo.&echo Limpeza do WinSxS concluida!&call :PauseMenu & goto :MENU
 :DEFRAG_C
 call :Header&echo --- OTIMIZAR UNIDADE C: (Desfragmentar/TRIM) ---
 defrag C: /O /U /V&call :PauseMenu & goto :MENU
-
 :FIND_LARGE_FILES
 call :Header&echo --- ENCONTRAR FICHEIROS GRANDES NA UNIDADE C: (>1GB) ---
 echo A procura pode demorar varios minutos. Por favor, aguarde...
 powershell -NoProfile "Get-ChildItem C:\ -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -gt 1GB } | Sort-Object Length -Descending | Select-Object -First 20 | Format-Table @{Name='Tamanho (GB)';E={[math]::Round($_.Length/1GB,2)}},FullName -A"
 call :PauseMenu & goto :MENU
-
 :LICENSE_MENU
-:: (Modulo V11.0)
 call :Header
 echo -------------------[ GESTAO DE LICENCAS E ATIVACAO ]--------------------
 echo  [1] Verificar Status da Ativacao (Windows e Office)
@@ -289,12 +297,10 @@ if "%LIC_OP%"=="2" goto :ACTIVATE_WINDOWS
 if "%LIC_OP%"=="3" goto :ACTIVATE_OFFICE
 if "%LIC_OP%"=="0" goto :MENU
 goto :LICENSE_MENU
-
 :CHECK_ACTIVATION
 call :Header&echo --- STATUS DA ATIVACAO ---&echo.&echo [WINDOWS]&cscript //nologo C:\Windows\System32\slmgr.vbs /dli&echo.&echo [OFFICE]&call :FindOSPP
 if defined OSPPSCRIPT (cscript //nologo "%OSPPSCRIPT%" /dstatus) else (echo Script do Office nao encontrado.)
 call :PauseMenu & goto :LICENSE_MENU
-
 :ACTIVATE_WINDOWS
 call :Header&echo --- ATIVACAO DO WINDOWS (KMS) ---
 call :ConfirmAction "Deseja tentar ativar o Windows"&if !ACTION_CANCELLED!==1 goto :LICENSE_MENU
@@ -305,7 +311,6 @@ cscript //nologo C:\Windows\System32\slmgr.vbs /skms kms.msguides.com
 echo.&echo [PASSO 3 de 3] A tentar a ativacao...
 cscript //nologo C:\Windows\System32\slmgr.vbs /ato
 echo.&echo Processo concluido.&call :PauseMenu & goto :LICENSE_MENU
-
 :ACTIVATE_OFFICE
 call :Header&echo --- ATIVACAO DO OFFICE (KMS) ---
 call :FindOSPP&if not defined OSPPSCRIPT (echo Script do Office nao encontrado.&call :PauseMenu&goto :LICENSE_MENU)
@@ -315,25 +320,19 @@ cscript //nologo "%OSPPSCRIPT%" /sethst:kms.msguides.com
 echo.&echo [PASSO 2 de 2] A tentar a ativacao...
 cscript //nologo "%OSPPSCRIPT%" /act
 echo.&echo Processo concluido.&call :PauseMenu & goto :LICENSE_MENU
-
 :FindOSPP
 set "OSPPSCRIPT="
 for /d %%d in ("%ProgramFiles%\Microsoft Office\Office*") do if exist "%%d\ospp.vbs" set "OSPPSCRIPT=%%d\ospp.vbs"
 if not defined OSPPSCRIPT for /d %%d in ("%ProgramFiles(x86)%\Microsoft Office\Office*") do if exist "%%d\ospp.vbs" set "OSPPSCRIPT=%%d\ospp.vbs"
 goto :eof
-
 :RESTORE_POINT
 call :Header&call :ConfirmAction "Deseja criar um ponto de restauracao agora"&if !ACTION_CANCELLED!==1 goto :MENU
 powershell -NoProfile "Checkpoint-Computer -Description 'PontoManual_JPToolbox'"&echo Ponto de restauracao criado.&call :PauseMenu & goto :MENU
-
 :MANAGE_STARTUP
 call :Header&echo A abrir a gestao de aplicacoes de arranque...&start "" ms-settings:startupapps&goto :MENU
-
 :UNINSTALL_PROGRAMS
 call :Header&echo A abrir o painel 'Adicionar ou Remover Programas'...&start "" appwiz.cpl&goto :MENU
-
 :POWER_MENU
-:: (Modulo V5.0)
 call :Header
 echo -------------------[ GESTAO AVANCADA DE ENERGIA ]-------------------
 echo  [1] Desligar/Reiniciar apos um TEMPORIZADOR
@@ -348,27 +347,22 @@ if "%P_OP%"=="3" goto :POWER_PROCESS
 if "%P_OP%"=="4" (shutdown /a >nul & schtasks /Delete /TN JPToolboxPowerAction /F >nul 2>&1 & echo Agendamentos cancelados.)
 if "%P_OP%"=="0" goto :MENU
 call :PauseMenu & goto :POWER_MENU
-
 :POWER_TIMER
 set /p M=Minutos para a acao: &set /p A=Acao (S=Desligar, R=Reiniciar):
 set /a S=%M%*60&if /i "%A%"=="S" (shutdown /s /f /t %S%)&if /i "%A%"=="R" (shutdown /r /f /t %S%)
 echo Acao agendada.&goto :POWER_MENU
-
 :POWER_TIME
 set /p T=Hora (HH:MM): &set /p A=Acao (S=Desligar, R=Reiniciar):
 set "CMD=shutdown /s /f"&if /i "%A%"=="R" set "CMD=shutdown /r /f"
 schtasks /Create /TN JPToolboxPowerAction /TR "%CMD%" /SC ONCE /ST %T% /F
 echo Acao agendada.&goto :POWER_MENU
-
 :POWER_PROCESS
 set /p P=Nome do processo (ex: chrome.exe): &set /p A=Acao (S=Desligar, R=Reiniciar):
 set "CMD=shutdown /s /f /t 15"&if /i "%A%"=="R" set "CMD=shutdown /r /f /t 15"
 :PCLoop
 cls&echo A monitorizar %P%... Prima CTRL+C para cancelar.&tasklist /FI "IMAGENAME eq %P%" 2>NUL|find /I /N "%P%">NUL
 if "%ERRORLEVEL%"=="0" (timeout /t 30 /nobreak>nul&goto :PCLoop) else (%CMD%&echo Processo %P% terminado. Acao executada.&call :PauseMenu&goto :MENU)
-
 :SYSINFO_DETAILED
-:: (Modulo V6.0)
 call :Header & echo A recolher informacoes do sistema. Aguarde... & (
 echo.&echo --- Sistema Operativo -----------------------------------------------
 wmic os get Caption,Version,OSArchitecture,InstallDate /format:list
@@ -384,17 +378,14 @@ echo.&echo --- Volumes Logicos -------------------------------------------------
 powershell "Get-WmiObject Win32_LogicalDisk -F 'DriveType=3'|FT DeviceID,@{N='Total (GB)';E={[math]::Round($_.Size/1GB,2)}},@{N='Livre (GB)';E={[math]::Round($_.FreeSpace/1GB,2)}} -A"
 )|more
 call :PauseMenu & goto :MENU
-
 :WIFI_PASS
 call :Header&echo --- PERFIS E SENHAS WI-FI SALVAS ---
 for /f "tokens=2 delims=:" %%P in ('netsh wlan show profiles') do (set "ssid=%%P" & set "ssid=!ssid:~1!" & for /f "tokens=2 delims=:" %%K in ('netsh wlan show profile name^="!ssid!" key^=clear ^| findstr /C:"Key Content"') do (echo  - Rede: !ssid! --- Senha: %%K))
 call :PauseMenu & goto :MENU
-
 :RESET_NET
 call :Header&call :ConfirmAction "Isto ira resetar as configuracoes de rede e requer um reinicio. Continuar"
 if !ACTION_CANCELLED!==1 goto :MENU
 netsh winsock reset&netsh int ip reset&echo Operacao concluida. REINICIE o computador.&call :PauseMenu & goto :MENU
-
 :FIREWALL_MENU
 call :Header&echo --- GERIR FIREWALL DO WINDOWS ---
 echo [1] Ligar [2] Desligar [3] Resetar&set /p FW_OP=Opcao:
@@ -402,6 +393,5 @@ if "%FW_OP%"=="1" (netsh advfirewall set allprofiles state on & echo Firewall AT
 if "%FW_OP%"=="2" (netsh advfirewall set allprofiles state off & echo Firewall DESATIVADO.)
 if "%FW_OP%"=="3" (netsh advfirewall reset & echo Firewall RESETADO.)
 call :PauseMenu & goto :MENU
-
 :SAIR
 cls&echo Encerrando a ferramenta de suporte... Ate logo!&timeout /t 2 /nobreak >nul&endlocal&exit /b 0
